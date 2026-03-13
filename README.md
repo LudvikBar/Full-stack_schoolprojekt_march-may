@@ -1,19 +1,7 @@
 # Full-stack SchoolProjekt March-May
 
 
-
 ### Idea:
 
-In this projekt I am going to host a frontend with a connected backend and db on my home pi and make it viewable everywhere with a domain on the internet.
+The Idea is a presonal all-in-one school workflow tool. With a **Electron desktop interface and as a website**. First you are greeted with a loggin and a sign up screen. Then a dashboard with Todo list, small cloud, the school calender and more. Each user has their own separate data.
 
-**Two interfaces** 
-
-- One Electron based with Todo and Filesharing localy
-- One webpage hosted to the internett containing the same as the Electron based only addition is y personal portfolio
-
-
-**Loggin**
-
-Loggin when entering todo
-
-Filesharing is public on the local internet, but a passcode can be sett so only the intended user can acces it.
