@@ -17,12 +17,15 @@
   width: 100%;
   background-color: rgb(84, 84, 84);
   transition: width 0.2s ease, height 0.2s ease;
+  font-size: 3rem;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow bold', sans-serif;
 }
 
 .startpagebutton:hover{
   height: 110%;
   width: 110%;
   background-color: rgb(42, 42, 42);
+  font-size: 3.2rem;
 }
 
 

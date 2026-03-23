@@ -1,3 +1,6 @@
+require('dotenv').config()
+
+
 const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
 
@@ -13,12 +16,14 @@ const createWindow = () => {
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
     },
   });
 
   // and load the index.html of the app.
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
-
+  mainWindow.webContents.openDevTools()
 };
 
 // This method will be called when Electron has finished

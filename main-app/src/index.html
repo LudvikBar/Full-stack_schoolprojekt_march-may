@@ -1,25 +1,92 @@
 <!doctype html>
 <html>
-  <head>
+<head>
     <meta charset="UTF-8" />
     <title>ElectronApp</title>
     <link rel="stylesheet" href="index.css" />
-  </head>
-  <body>
-  
+</head>
+<body>
 
-<div class="container">
+<div>
 
-  <div class="leftcsubcontainer">
-    <button class="startpagebutton">Todo</button>
-  </div>
 
-  <div class="rightcsubcontainer">
-    <Button class="startpagebutton">Filesharing</Button>
-  </div>
+    <div>
+        <h2>Sign up</h2>
+        <input type="email" placeholder="Email" id="register-email">
+        <input type="password" placeholder="Password" id="register-password">
+        <button id="register-btn">Register</button>
+    </div>
+
+    <div>
+        <h2>Sign in</h2>
+        <input type="email" placeholder="Email" id="login-email">
+        <input type="password" placeholder="Password" id="login-password">
+        <button id="login-btn">Login</button>
+
+    </div>
+<p id="message"></p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+
+        console.log('script loaded')
+        console.log('window.api =', window.api)
+        console.log('supabase global =', typeof supabase)
+
+        const SUPABASE_URL = 'https://peknoeezpvwaxphzhhlr.supabase.co'
+        const SUPABASE_ANON_KEY = 'sb_publishable_dKM0erA90Wk5DfWFGnQLYA_02B9G1ff'
+
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+        console.log('supabaseClient =', supabaseClient)
+
+        const registerBtn = document.getElementById('register-btn')
+        const loginBtn = document.getElementById('login-btn')
+        const message = document.getElementById('message')
+
+        registerBtn.addEventListener('click', async () => {
+            console.log('register clicked')
+
+            const email = document.getElementById('register-email').value
+            const password = document.getElementById('register-password').value
+
+            const { data, error } = await supabaseClient.auth.signUp({
+                email,
+                password
+            })
+
+            if (error) {
+                message.textContent = 'Register error: ' + error.message
+            } else {
+                message.textContent = 'Registered successfully!'
+                console.log(data)
+            }
+        })
+
+        loginBtn.addEventListener('click', async () => {
+            console.log('login clicked')
+
+            const email = document.getElementById('login-email').value
+            const password = document.getElementById('login-password').value
+
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email,
+                password
+            })
+
+            console.log('login data:', data)
+            console.log('login error:', error)
+
+            if (error) {
+                message.textContent = 'Login error: ' + error.message
+            } else {
+                message.textContent = 'Login successful!'
+                console.log(data)
+            }
+        })
+
+</script>
+
 </div>
 
-
-    
-  </body>
+</body>
 </html>
