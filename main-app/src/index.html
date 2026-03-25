@@ -7,9 +7,9 @@
 </head>
 <body>
 
+
+
 <div>
-
-
     <div>
         <h2>Sign up</h2>
         <input type="email" placeholder="Email" id="register-email">
@@ -81,6 +81,8 @@
             } else {
                 message.textContent = 'Login successful!'
                 console.log(data)
+
+                window.location.href = 'dashboard.html'
             }
         })
 

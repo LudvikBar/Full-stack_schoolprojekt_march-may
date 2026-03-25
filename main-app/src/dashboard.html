@@ -6,7 +6,8 @@
     <link rel="stylesheet" href="index.css" />
 </head>
 <body>
-
+<p id="status">Checking session..</p>
+<button id="logout-btn">Logout</button>
 
 <div class="container">
 
@@ -21,5 +22,43 @@
 
 
 
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+        const SUPABASE_URL = 'https://peknoeezpvwaxphzhhlr.supabase.co'
+        const SUPABASE_ANON_KEY = 'sb_publishable_dKM0erA90Wk5DfWFGnQLYA_02B9G1ff'
+
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+        const status = document.getElementById('status')
+        const logoutBtn = document.getElementById('logout-btn')
+
+        async function checkSession() {
+            const { data, error } = await supabaseClient.auth.getSession()
+
+            console.log('dashboard session data:', data)
+            console.log('dashboard session error:', error)
+            
+            if (!data.session) {
+                window.location.herf = 'index.html'
+                return
+            }
+
+            status.textContent = 'Logged in as: ' + data.session.user.email
+        }
+
+        logoutBtn.addEventListener('click', async () => {
+            const {error } = await supabaseClient.auth.signOut()
+
+            if (error) {
+                status.textContent = 'Logout Error: ' + error.message
+                return
+            }
+
+            window.location.href = 'index.html'
+        })
+        checkSession()
+</script>
 </body>
 </html>
