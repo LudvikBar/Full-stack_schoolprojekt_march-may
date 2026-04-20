@@ -1,0 +1,245 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Todo</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <h1 class="todoheader">To-do</h1>
+
+  <div>
+    <input id="todo-title" type="text" placeholder="Title">
+    <textarea id="todo-notes" placeholder="Notes (optional)"></textarea>
+
+    <select id="todo-priority">
+      <option value="1">🟢 1</option>
+      <option value="2" selected>🟡 2</option>
+      <option value="3">🔴 3</option>
+    </select>
+
+    <input id="todo-group" type="text" placeholder="Group (optional)">
+    <button id="add-todo-btn">Add todo</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <input id="group-search" type="text" placeholder="Search group">
+    <button id="search-group-btn">Search</button>
+    <button id="clear-group-btn">Clear</button>
+    <button id="show-completed-btn">Show completed</button>
+    <button id="back-btn">Back</button>
+  </div>
+
+  <p id="message"></p>
+  <ul id="todo-list"></ul>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+        const SUPABASE_URL = 'https://peknoeezpvwaxphzhhlr.supabase.co'
+        const SUPABASE_ANON_KEY = 'sb_publishable_dKM0erA90Wk5DfWFGnQLYA_02B9G1ff'
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+    const titleInput = document.getElementById('todo-title')
+    const notesInput = document.getElementById('todo-notes')
+    const priorityInput = document.getElementById('todo-priority')
+    const groupInput = document.getElementById('todo-group')
+    const addTodoBtn = document.getElementById('add-todo-btn')
+
+    const groupSearchInput = document.getElementById('group-search')
+    const searchGroupBtn = document.getElementById('search-group-btn')
+    const clearGroupBtn = document.getElementById('clear-group-btn')
+    const showCompletedBtn = document.getElementById('show-completed-btn')
+    const backBtn = document.getElementById('back-btn')
+
+    const message = document.getElementById('message')
+    const todoList = document.getElementById('todo-list')
+
+    let showCompleted = false
+    let currentGroupSearch = ''
+
+    async function requireSession() {
+      const { data, error } = await supabaseClient.auth.getSession()
+
+      if (error || !data.session) {
+        window.location.href = 'index.html'
+        return null
+      }
+
+      return data.session
+    }
+
+    function getPriorityLabel(priority) {
+      if (priority === 1) return '🟢 1'
+      if (priority === 2) return '🟡 2'
+      if (priority === 3) return '🔴 3'
+      return ''
+    }
+
+    async function loadTodos() {
+      const session = await requireSession()
+      if (!session) return
+
+      let query = supabaseClient
+        .from('todos')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (!showCompleted) {
+        query = query.eq('completed', false)
+      }
+
+      if (currentGroupSearch.trim() !== '') {
+        query = query.ilike('group_name', `%${currentGroupSearch}%`)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        message.textContent = 'Load error: ' + error.message
+        return
+      }
+
+      todoList.innerHTML = ''
+
+      data.forEach(todo => {
+        const li = document.createElement('li')
+
+        const checkbox = document.createElement('input')
+        checkbox.type = 'checkbox'
+        checkbox.checked = todo.completed
+        checkbox.addEventListener('change', async () => {
+          await toggleTodo(todo.id, checkbox.checked)
+        })
+
+        const content = document.createElement('div')
+
+        const title = document.createElement('strong')
+        title.textContent = `${getPriorityLabel(todo.priority)} ${todo.title}`
+
+        const notes = document.createElement('div')
+        notes.textContent = todo.notes ? `Notes: ${todo.notes}` : ''
+
+        const group = document.createElement('div')
+        group.textContent = todo.group_name ? `Group: ${todo.group_name}` : ''
+
+        if (todo.completed) {
+          title.style.textDecoration = 'line-through'
+          title.style.opacity = '0.6'
+          notes.style.opacity = '0.6'
+          group.style.opacity = '0.6'
+        }
+
+        content.appendChild(title)
+        if (todo.notes) content.appendChild(notes)
+        if (todo.group_name) content.appendChild(group)
+
+        const deleteBtn = document.createElement('button')
+        deleteBtn.textContent = 'Delete'
+        deleteBtn.addEventListener('click', async () => {
+          await deleteTodo(todo.id)
+        })
+
+        li.appendChild(checkbox)
+        li.appendChild(content)
+        li.appendChild(deleteBtn)
+        todoList.appendChild(li)
+      })
+    }
+
+    async function addTodo() {
+      const session = await requireSession()
+      if (!session) return
+
+      const title = titleInput.value.trim()
+      const notes = notesInput.value.trim()
+      const priority = Number(priorityInput.value)
+      const group_name = groupInput.value.trim()
+
+      if (!title) {
+        message.textContent = 'Title is required.'
+        return
+      }
+
+      const { error } = await supabaseClient
+        .from('todos')
+        .insert({
+          user_id: session.user.id,
+          title,
+          notes: notes || null,
+          priority,
+          group_name: group_name || null,
+          completed: false
+        })
+
+      if (error) {
+        message.textContent = 'Add error: ' + error.message
+        return
+      }
+
+      titleInput.value = ''
+      notesInput.value = ''
+      priorityInput.value = '2'
+      groupInput.value = ''
+      message.textContent = 'Todo added.'
+
+      loadTodos()
+    }
+
+    async function toggleTodo(id, completed) {
+      const { error } = await supabaseClient
+        .from('todos')
+        .update({ completed })
+        .eq('id', id)
+
+      if (error) {
+        message.textContent = 'Update error: ' + error.message
+        return
+      }
+
+      loadTodos()
+    }
+
+    async function deleteTodo(id) {
+      const { error } = await supabaseClient
+        .from('todos')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        message.textContent = 'Delete error: ' + error.message
+        return
+      }
+
+      loadTodos()
+    }
+
+    addTodoBtn.addEventListener('click', addTodo)
+
+    searchGroupBtn.addEventListener('click', () => {
+      currentGroupSearch = groupSearchInput.value.trim()
+      loadTodos()
+    })
+
+    clearGroupBtn.addEventListener('click', () => {
+      currentGroupSearch = ''
+      groupSearchInput.value = ''
+      loadTodos()
+    })
+
+    showCompletedBtn.addEventListener('click', () => {
+      showCompleted = !showCompleted
+      showCompletedBtn.textContent = showCompleted ? 'Hide completed' : 'Show completed'
+      loadTodos()
+    })
+
+    backBtn.addEventListener('click', () => {
+      window.location.href = 'dashboard.html'
+    })
+
+    loadTodos()
+  </script>
+</body>
+</html>
