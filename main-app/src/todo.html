@@ -6,71 +6,134 @@
   <link rel="stylesheet" href="index.css" />
 </head>
 <body>
+
+
   <h1 class="todoheader">To-do</h1>
 
+
   <div>
+    <!-- Required: the main label/name for the todo -->
     <input id="todo-title" type="text" placeholder="Title">
+
+    <!-- Optional: longer description or context for the todo -->
     <textarea id="todo-notes" placeholder="Notes (optional)"></textarea>
 
+    <!-- Priority selector: 1 (low/green), 2 (medium/yellow, default), 3 (high/red) -->
     <select id="todo-priority">
       <option value="1">🟢 1</option>
-      <option value="2" selected>🟡 2</option>
+      <option value="2" selected>🟡 2</option> <!-- 'selected' makes this the default -->
       <option value="3">🔴 3</option>
     </select>
 
+    <!-- Optional: assign the todo to a named group for filtering later -->
     <input id="todo-group" type="text" placeholder="Group (optional)">
+
+    <!-- Triggers the addTodo() function on click -->
     <button id="add-todo-btn">Add todo</button>
   </div>
 
   <hr>
 
+  <!-- ===================== FILTER / NAVIGATION CONTROLS ===================== -->
   <div>
+    <!-- Text input used to filter todos by group name (uses ilike on the DB side) -->
     <input id="group-search" type="text" placeholder="Search group">
+
+    <!-- Applies the group filter and reloads the list -->
     <button id="search-group-btn">Search</button>
+
+    <!-- Clears the group filter and reloads the full list -->
     <button id="clear-group-btn">Clear</button>
+
+    <!-- Toggles visibility of completed todos (off by default) -->
     <button id="show-completed-btn">Show completed</button>
+
+    <!-- Redirects the user back to the dashboard page -->
     <button id="back-btn">Back</button>
   </div>
 
+  <!-- ===================== STATUS MESSAGES ===================== -->
+  <!-- Used to show inline feedback: errors, success messages, etc. -->
   <p id="message"></p>
+
+  <!-- ===================== TODO LIST OUTPUT ===================== -->
+  <!-- Dynamically populated by loadTodos() — each <li> is one todo -->
   <ul id="todo-list"></ul>
 
+  <!-- ===================== SUPABASE SDK ===================== -->
+  <!-- Loads the Supabase JS client from CDN (used for DB + auth) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-        const SUPABASE_URL = 'https://peknoeezpvwaxphzhhlr.supabase.co'
-        const SUPABASE_ANON_KEY = 'sb_publishable_dKM0erA90Wk5DfWFGnQLYA_02B9G1ff'
 
+  <script>
+    // ===================== SUPABASE CONFIGURATION =====================
+    // These credentials connect to your specific Supabase project.
+    // SUPABASE_ANON_KEY is safe to expose publicly — it's row-level security
+    // that controls access on the database side, not this key.
+    const SUPABASE_URL = 'https://peknoeezpvwaxphzhhlr.supabase.co'
+    const SUPABASE_ANON_KEY = 'sb_publishable_dKM0erA90Wk5DfWFGnQLYA_02B9G1ff'
+
+    // Initialise the Supabase client — all DB and auth calls go through this
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-    const titleInput = document.getElementById('todo-title')
-    const notesInput = document.getElementById('todo-notes')
+    
+    // ===================== DOM REFERENCES =====================
+    // Grabbed once at the top so we don't query the DOM repeatedly
+
+    // --- Form inputs ---
+    const titleInput    = document.getElementById('todo-title')
+    const notesInput    = document.getElementById('todo-notes')
     const priorityInput = document.getElementById('todo-priority')
-    const groupInput = document.getElementById('todo-group')
-    const addTodoBtn = document.getElementById('add-todo-btn')
+    const groupInput    = document.getElementById('todo-group')
+    const addTodoBtn    = document.getElementById('add-todo-btn')
 
-    const groupSearchInput = document.getElementById('group-search')
-    const searchGroupBtn = document.getElementById('search-group-btn')
-    const clearGroupBtn = document.getElementById('clear-group-btn')
-    const showCompletedBtn = document.getElementById('show-completed-btn')
-    const backBtn = document.getElementById('back-btn')
+    // --- Filter / nav controls ---
+    const groupSearchInput  = document.getElementById('group-search')
+    const searchGroupBtn    = document.getElementById('search-group-btn')
+    const clearGroupBtn     = document.getElementById('clear-group-btn')
+    const showCompletedBtn  = document.getElementById('show-completed-btn')
+    const backBtn           = document.getElementById('back-btn')
 
-    const message = document.getElementById('message')
-    const todoList = document.getElementById('todo-list')
+    // --- Output elements ---
+    const message  = document.getElementById('message')   // status/error text
+    const todoList = document.getElementById('todo-list') // rendered list of todos
 
-    let showCompleted = false
-    let currentGroupSearch = ''
 
+    // ===================== APP STATE =====================
+    // These two variables drive how loadTodos() queries the database.
+    // They persist across interactions without a page reload.
+
+    let showCompleted = false       // When false, completed todos are hidden
+    let currentGroupSearch = ''     // Empty string = no group filter active
+
+
+    // ===================== AUTH GUARD =====================
+    /**
+     * requireSession()
+     * Checks whether the user has an active Supabase session.
+     * If not (e.g. they navigated here directly without logging in),
+     * they get sent back to index.html (the login page).
+     * Every data function calls this first so no DB access happens unauthenticated.
+     */
     async function requireSession() {
       const { data, error } = await supabaseClient.auth.getSession()
 
+      // Redirect to login if no session exists or an auth error occurred
       if (error || !data.session) {
         window.location.href = 'index.html'
         return null
       }
 
-      return data.session
+      return data.session // Pass the session back so callers can use session.user.id
     }
 
+
+    // ===================== HELPER: PRIORITY LABEL =====================
+    /**
+     * getPriorityLabel(priority)
+     * Converts the numeric priority (1, 2, 3) stored in the DB
+     * into the matching emoji + number label shown in the UI.
+     * Falls back to an empty string for any unexpected value.
+     */
     function getPriorityLabel(priority) {
       if (priority === 1) return '🟢 1'
       if (priority === 2) return '🟡 2'
@@ -78,19 +141,33 @@
       return ''
     }
 
+
+    // ===================== LOAD TODOS =====================
+    /**
+     * loadTodos()
+     * Fetches todos from Supabase and renders them into #todo-list.
+     * Respects the two state flags:
+     *   - showCompleted: adds/removes the `.eq('completed', false)` filter
+     *   - currentGroupSearch: adds/removes an `.ilike()` group filter
+     * Clears and re-renders the list on every call (simple full refresh approach).
+     */
     async function loadTodos() {
       const session = await requireSession()
-      if (!session) return
+      if (!session) return // Auth guard — stop if not logged in
 
+      // Start building the query: select all columns, newest first
       let query = supabaseClient
         .from('todos')
         .select('*')
         .order('created_at', { ascending: false })
 
+      // Only fetch incomplete todos unless the user has toggled "Show completed"
       if (!showCompleted) {
         query = query.eq('completed', false)
       }
 
+      // Apply group name filter if the user has searched for one
+      // ilike = case-insensitive LIKE — the %…% wrapping matches substrings
       if (currentGroupSearch.trim() !== '') {
         query = query.ilike('group_name', `%${currentGroupSearch}%`)
       }
@@ -102,29 +179,39 @@
         return
       }
 
+      // Wipe the current list before re-rendering from fresh data
       todoList.innerHTML = ''
 
+      // ---- Build one <li> per todo ----
       data.forEach(todo => {
         const li = document.createElement('li')
 
+        // Checkbox: reflects current completed state; triggers toggleTodo() on change
         const checkbox = document.createElement('input')
         checkbox.type = 'checkbox'
         checkbox.checked = todo.completed
         checkbox.addEventListener('change', async () => {
+          // Pass the new checked value so the DB is updated to match
           await toggleTodo(todo.id, checkbox.checked)
         })
 
+        // Container for the text content of the todo
         const content = document.createElement('div')
 
+        // Title line: prefixed with the priority emoji label
         const title = document.createElement('strong')
         title.textContent = `${getPriorityLabel(todo.priority)} ${todo.title}`
 
+        // Notes line: only shown if notes exist on this todo
         const notes = document.createElement('div')
         notes.textContent = todo.notes ? `Notes: ${todo.notes}` : ''
 
+        // Group line: only shown if a group is assigned
         const group = document.createElement('div')
         group.textContent = todo.group_name ? `Group: ${todo.group_name}` : ''
 
+        // Visual treatment for completed todos: strike-through + fade
+        // Applied to title, notes, and group so the whole item looks done
         if (todo.completed) {
           title.style.textDecoration = 'line-through'
           title.style.opacity = '0.6'
@@ -132,16 +219,19 @@
           group.style.opacity = '0.6'
         }
 
+        // Always append title; notes and group are conditional on having content
         content.appendChild(title)
         if (todo.notes) content.appendChild(notes)
         if (todo.group_name) content.appendChild(group)
 
+        // Delete button: permanently removes this todo from the DB
         const deleteBtn = document.createElement('button')
         deleteBtn.textContent = 'Delete'
         deleteBtn.addEventListener('click', async () => {
           await deleteTodo(todo.id)
         })
 
+        // Assemble the list item: [checkbox] [content block] [delete button]
         li.appendChild(checkbox)
         li.appendChild(content)
         li.appendChild(deleteBtn)
@@ -149,15 +239,25 @@
       })
     }
 
+
+    // ===================== ADD TODO =====================
+    /**
+     * addTodo()
+     * Reads all form fields, validates that a title exists,
+     * inserts a new row into the 'todos' table in Supabase,
+     * then clears the form and refreshes the list.
+     */
     async function addTodo() {
       const session = await requireSession()
       if (!session) return
 
-      const title = titleInput.value.trim()
-      const notes = notesInput.value.trim()
-      const priority = Number(priorityInput.value)
+      // Read and sanitise form values
+      const title      = titleInput.value.trim()
+      const notes      = notesInput.value.trim()
+      const priority   = Number(priorityInput.value) // Convert string → number for DB
       const group_name = groupInput.value.trim()
 
+      // Title is the only required field — bail early with a message if missing
       if (!title) {
         message.textContent = 'Title is required.'
         return
@@ -166,12 +266,12 @@
       const { error } = await supabaseClient
         .from('todos')
         .insert({
-          user_id: session.user.id,
+          user_id: session.user.id, // Ties the row to the logged-in user (for RLS)
           title,
-          notes: notes || null,
+          notes: notes || null,           // Store null rather than empty string
           priority,
-          group_name: group_name || null,
-          completed: false
+          group_name: group_name || null, // Same — null means "no group"
+          completed: false                // New todos always start incomplete
         })
 
       if (error) {
@@ -179,20 +279,29 @@
         return
       }
 
-      titleInput.value = ''
-      notesInput.value = ''
-      priorityInput.value = '2'
-      groupInput.value = ''
+      // Reset form to defaults after a successful insert
+      titleInput.value    = ''
+      notesInput.value    = ''
+      priorityInput.value = '2' // Back to medium priority
+      groupInput.value    = ''
       message.textContent = 'Todo added.'
 
-      loadTodos()
+      loadTodos() // Refresh the list so the new item appears immediately
     }
 
+
+    // ===================== TOGGLE COMPLETE =====================
+    /**
+     * toggleTodo(id, completed)
+     * Updates the 'completed' boolean on a single todo row.
+     * Called whenever the user checks/unchecks a todo's checkbox.
+     * Reloads the list afterwards so visibility rules (showCompleted) are re-applied.
+     */
     async function toggleTodo(id, completed) {
       const { error } = await supabaseClient
         .from('todos')
         .update({ completed })
-        .eq('id', id)
+        .eq('id', id) // Only update the specific row that was toggled
 
       if (error) {
         message.textContent = 'Update error: ' + error.message
@@ -202,11 +311,18 @@
       loadTodos()
     }
 
+
+    // ===================== DELETE TODO =====================
+    /**
+     * deleteTodo(id)
+     * Permanently deletes a todo row from the database by its ID.
+     * No confirmation prompt — immediate delete on button click.
+     */
     async function deleteTodo(id) {
       const { error } = await supabaseClient
         .from('todos')
         .delete()
-        .eq('id', id)
+        .eq('id', id) // Scoped to just this one row
 
       if (error) {
         message.textContent = 'Delete error: ' + error.message
@@ -216,29 +332,40 @@
       loadTodos()
     }
 
+
+    // ===================== EVENT LISTENERS =====================
+    // Wired here at the bottom so all functions are defined before being referenced
+
     addTodoBtn.addEventListener('click', addTodo)
 
+    // Apply the typed group name as a filter and reload
     searchGroupBtn.addEventListener('click', () => {
       currentGroupSearch = groupSearchInput.value.trim()
       loadTodos()
     })
 
+    // Reset the group filter completely and reload
     clearGroupBtn.addEventListener('click', () => {
       currentGroupSearch = ''
       groupSearchInput.value = ''
       loadTodos()
     })
 
+    // Flip the showCompleted flag and update the button label to match
     showCompletedBtn.addEventListener('click', () => {
       showCompleted = !showCompleted
       showCompletedBtn.textContent = showCompleted ? 'Hide completed' : 'Show completed'
       loadTodos()
     })
 
+    // Navigate away to the main dashboard
     backBtn.addEventListener('click', () => {
       window.location.href = 'dashboard.html'
     })
 
+
+    // ===================== INITIAL LOAD =====================
+    // Kick off the first data fetch as soon as the page is ready
     loadTodos()
   </script>
 </body>
